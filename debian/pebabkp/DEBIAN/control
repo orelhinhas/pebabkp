@@ -1,0 +1,10 @@
+Package: pebabkp
+Version: 0.1-4
+Architecture: amd64
+Maintainer: Joao Gabriel <jglisanti@gmail.com>
+Installed-Size: 41
+Depends: python, python-paramiko
+Section: admin
+Priority: extra
+Homepage: http://www.github.com/orelhinhas
+Description: Databases backup system

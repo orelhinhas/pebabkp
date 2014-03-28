@@ -1,0 +1,14 @@
+Source: pebabkp
+Section: admin
+Priority: extra
+Maintainer: Joao Gabriel <jglisanti@gmail.com>
+Build-Depends: debhelper (>= 8.0.0)
+Standards-Version: 3.9.3
+Homepage: http://www.github.com/orelhinhas
+#Vcs-Git: git://git.debian.org/collab-maint/pebabkp.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/pebabkp.git;a=summary
+
+Package: pebabkp
+Architecture: any
+Depends: python, python-paramiko
+Description: Databases backup system
