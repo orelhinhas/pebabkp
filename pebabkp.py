@@ -4,6 +4,7 @@ import bz2
 import sys
 import time
 import shutil
+import tarfile
 import argparse
 import paramiko
 import subprocess
@@ -19,12 +20,17 @@ user = config.get('global', 'user')
 auth_method = config.get('global', 'auth_method')
 port = config.getint('global', 'port_bkp')
 date = time.strftime("%Y-%m-%d_%H%M%S")
+local_dir = config.get('global', 'local_dir')
+file_redis = config.get('redis', 'file_redis')
+redis_bkp_dir = config.get('redis', 'redis_bkp_dir')
+
 
 # Start Function
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('-r', '--redis',  help='Make a Redis Backup', action='store_true')
   parser.add_argument('-p', '--postgres', help='Make a PostgreSQL Backup', action='store_true')
+  parser.add_argument('-d', '--directory', help='Compress and copy directory', action='store_true')
   parser.add_argument('-c', '--remote', help='Copy bkps to remote', action='store_true')
   args = parser.parse_args()
   if args.redis and args.postgres:
@@ -54,6 +60,8 @@ def main():
     remote_file = '%s/%s' % (path_remote_dir, os.path.basename(psql_dump))
     print remote_file
     transfer_sftp(host_bkp, port, user, psql_dump, remote_file)
+  elif args.directory:
+    directory(date)
 
 # Create a local backup directory
 def create_bkp_dir(bkp_dir):
@@ -61,47 +69,60 @@ def create_bkp_dir(bkp_dir):
     os.makedirs(bkp_dir)
 
 # compress dumps with bz2
-def compress(dump):
-  data = open(dump, 'r').read()
-  compress = bz2.BZ2File('%s.bz2' % dump, 'wb')
-  compress.write(data)
-  compress.close()
-  os.remove(dump)
-  dump = compress.name
-  return dump
+def compress(dump, dest, date):
+  if os.path.exists(dump):
+    if os.path.isfile(dump):
+      data = open(dump, 'r').read()
+      compress = bz2.BZ2File('%s.bz2' % (dump), 'wb')
+      compress.write(data)
+      compress.close()
+      os.remove(dump)
+      dump = compress.name
+      return dump
+    elif os.path.isdir(dump):
+      compress = tarfile.open('%s/%s-%s.tar.bz2' % (dest, dump, date), 'w:bz2')
+      compress.add(dump)
+      compress.close()
+  else:
+    print "File doesn't exist"
 
 # Function to dump and compress postgres
 def backup_postgres(date):
   user = config.get('postgres', 'user')
   psql_host = config.get('postgres', 'host')
   database = config.get('postgres', 'database')
-  dest = config.get('postgres', 'postgres_bkp_dir')
+  postgres_bkp_dir = config.get('postgres', 'postgres_bkp_dir')
   password = config.get('postgres', 'pass')
+  create_bkp_dir(postgres_bkp_dir)
   if password == 'NO_PASSWD':
     try:
-      cmd = subprocess.Popen(['/usr/bin/pg_dump', '-U', user, '-w', '-h', psql_host, '-O', database, '-f', '%s/%s-%s.sql' % (dest, database, date)], subprocess.PIPE).wait()
-      dump = '%s/%s-%s.sql' % (dest, database, date)
-      compress(dump)
-      dump_compress = '%s.bz2' % dump
+      cmd = subprocess.Popen(['/usr/bin/pg_dump', '-U', user, '-w', '-h', psql_host, '-O', database, '-f', '%s/%s-%s.sql' % (postgres_bkp_dir, database, date)], subprocess.PIPE).wait()
+      dump = '%s/%s-%s.sql' % (postgres_bkp_dir, database, date)
+      dump_compress = compress(dump, postgres_bkp_dir, date)
       return dump_compress
     except IOError:
       print "ERROR - Probably your pg_hba.conf is set to md5 and your /etc/pebabkp.conf with NO_PASSWD, please fix it"
   elif password <> 'NO_PASSWD':
-    cmd = subprocess.Popen(['PGPASSWORD=%s /usr/bin/pg_dump -U %s -h %s -O %s -f %s/%s-%s.sql' % (password, user, psql_host, database, dest, database, date)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True).wait()
-    dump = '%s/%s-%s.sql' % (dest, database, date)
-    compress(dump)
-    dump_compress = '%s.bz2' % dump
+    cmd = subprocess.Popen(['PGPASSWORD=%s /usr/bin/pg_dump -U %s -h %s -O %s -f %s/%s-%s.sql' % (password, user, psql_host, database, postgres_bkp_dir, database, date)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True).wait()
+    dump = '%s/%s-%s.sql' % (postgres_bkp_dir, database, date)
+    dump_compress = compress(dump, postgres_bkp_dir, date)
     return dump_compress
 
 # Function to dump and compress redis
 def backup_redis(date):
-  source_dir = config.get('redis', 'redis_dir')
-  dest_dir = config.get('redis', 'redis_bkp_dir')
-  create_bkp_dir(dest_dir)
-  dump = '%s/dump-%s.rdb' % (dest_dir, date)
-  shutil.copyfile('%s/dump.rdb' % (source_dir), dump)
-  dump_compress = compress(dump)
+  create_bkp_dir(redis_bkp_dir)
+  dump = redis_bkp_dir+'/dump-%s.rdb' % date
+  shutil.copyfile(file_redis, dump)
+  dump_compress = compress(dump, redis_bkp_dir, date)
   return dump_compress
+
+# Function to dump and compress directory
+def directory(date):
+  source_dir = config.get('dir', 'directories')
+  dest_dir = config.get('dir', 'dest_dir')
+  create_bkp_dir(dest_dir)
+  compress(source_dir, dest_dir, date)
+
 
 # Function to tranfers dumps to a remote server with sftp
 def transfer_sftp(host, port, user, source, dest):
