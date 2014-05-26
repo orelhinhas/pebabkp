@@ -23,15 +23,15 @@ date = time.strftime("%Y-%m-%d_%H%M%S")
 local_dir = config.get('global', 'local_dir')
 file_redis = config.get('redis', 'file_redis')
 redis_bkp_dir = config.get('redis', 'redis_bkp_dir')
-
+bkp_diary = config.get('dir', 'diary')
 
 # Start Function
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('-r', '--redis',  help='Make a Redis Backup', action='store_true')
   parser.add_argument('-p', '--postgres', help='Make a PostgreSQL Backup', action='store_true')
-  parser.add_argument('-d', '--directory', help='Compress and copy directory', action='store_true')
   parser.add_argument('-c', '--remote', help='Copy bkps to remote', action='store_true')
+  parser.add_argument('-s', '--s3', help='Prepare copy to Amazon S3', action='store_true')
   args = parser.parse_args()
   if args.redis and args.postgres:
     redis_dump = backup_redis(date)
@@ -40,17 +40,21 @@ def main():
     redis_dump = backup_redis(date)
   elif args.postgres:
     psql_dump = backup_postgres(date)
+  elif args.s3:
+      print "Use this option only with -c, -p and -r"
   else:
     parser.print_help()
   if args.remote and not (args.redis and args.postgres):
     parser.print_help()
-  elif args.remote and args.redis and args.postgres:
+  elif args.remote and args.redis and args.postgres and args.s3:
     path_remote_redis_dir = config.get('redis', 'remote_redis_dir')
     path_remote_postgres_dir = config.get('postgres', 'remote_postgres_dir')
     remote_file_redis = '%s/%s' % (path_remote_redis_dir, os.path.basename(redis_dump))
     remote_file_postgres = '%s/%s' % (path_remote_postgres_dir, os.path.basename(psql_dump))
     transfer_sftp(host_bkp, port, user, redis_dump, remote_file_redis)
     transfer_sftp(host_bkp, port, user, psql_dump, remote_file_postgres)
+    shutil.copy(redis_dump, bkp_diary)
+    shutil.copy(psql_dump, bkp_diary)
   elif args.remote and args.redis:
     path_remote_dir = config.get('redis', 'remote_redis_dir')
     remote_file = '%s/%s' %(path_remote_dir, os.path.basename(redis_dump))
@@ -60,8 +64,6 @@ def main():
     remote_file = '%s/%s' % (path_remote_dir, os.path.basename(psql_dump))
     print remote_file
     transfer_sftp(host_bkp, port, user, psql_dump, remote_file)
-  elif args.directory:
-    directory(date)
 
 # Create a local backup directory
 def create_bkp_dir(bkp_dir):
