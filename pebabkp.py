@@ -40,21 +40,6 @@ def main():
     redis_dump = backup_redis(date)
   elif args.postgres:
     psql_dump = backup_postgres(date)
-  elif args.s3:
-      print "Use this option only with -c, -p and -r"
-  else:
-    parser.print_help()
-  if args.remote and not (args.redis and args.postgres):
-    parser.print_help()
-  elif args.remote and args.redis and args.postgres and args.s3:
-    path_remote_redis_dir = config.get('redis', 'remote_redis_dir')
-    path_remote_postgres_dir = config.get('postgres', 'remote_postgres_dir')
-    remote_file_redis = '%s/%s' % (path_remote_redis_dir, os.path.basename(redis_dump))
-    remote_file_postgres = '%s/%s' % (path_remote_postgres_dir, os.path.basename(psql_dump))
-    transfer_sftp(host_bkp, port, user, redis_dump, remote_file_redis)
-    transfer_sftp(host_bkp, port, user, psql_dump, remote_file_postgres)
-    shutil.copy(redis_dump, bkp_diary)
-    shutil.copy(psql_dump, bkp_diary)
   elif args.remote and args.redis:
     path_remote_dir = config.get('redis', 'remote_redis_dir')
     remote_file = '%s/%s' %(path_remote_dir, os.path.basename(redis_dump))
@@ -64,6 +49,17 @@ def main():
     remote_file = '%s/%s' % (path_remote_dir, os.path.basename(psql_dump))
     print remote_file
     transfer_sftp(host_bkp, port, user, psql_dump, remote_file)
+  elif args.remote and args.redis and args.postgres and args.s3:
+    path_remote_redis_dir = config.get('redis', 'remote_redis_dir')
+    path_remote_postgres_dir = config.get('postgres', 'remote_postgres_dir')
+    remote_file_redis = '%s/%s' % (path_remote_redis_dir, os.path.basename(redis_dump))
+    remote_file_postgres = '%s/%s' % (path_remote_postgres_dir, os.path.basename(psql_dump))
+    transfer_sftp(host_bkp, port, user, redis_dump, remote_file_redis)
+    transfer_sftp(host_bkp, port, user, psql_dump, remote_file_postgres)
+    shutil.copy(redis_dump, bkp_diary)
+    shutil.copy(psql_dump, bkp_diary)
+  else:
+    parser.print_help()
 
 # Create a local backup directory
 def create_bkp_dir(bkp_dir):
